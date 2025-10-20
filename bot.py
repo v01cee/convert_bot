@@ -1,7 +1,7 @@
 import logging
 import os
 import tempfile
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BufferedInputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from config import BOT_TOKEN, MAX_FILE_SIZE, LOG_LEVEL, DEBUG
 from media_processor import MediaProcessor
@@ -54,7 +54,7 @@ class TelegramBot:
         keyboard = [
             [InlineKeyboardButton("🎥 Видео → Текст", callback_data="video_to_text")],
             [InlineKeyboardButton("🎵 Аудио → Текст", callback_data="audio_to_text")],
-            [InlineKeyboardButton("🗜️ Сжать через буфер", callback_data="compress_video")],
+            [InlineKeyboardButton("🗜️ Сжать через BufferedFile", callback_data="compress_video")],
             [InlineKeyboardButton("❓ Помощь", callback_data="help")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -101,14 +101,14 @@ class TelegramBot:
         await update.message.reply_text("🎛 Главное меню:", reply_markup=reply_markup)
     
     async def compress_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик команды /compress - сжатие видео через буфер"""
+        """Обработчик команды /compress - сжатие видео через BufferedFile"""
         await update.message.reply_text(
-            "🗜️ Режим сжатия видео через буфер\n\n"
+            "🗜️ Режим сжатия видео через BufferedFile\n\n"
             "Отправь мне видео, и я сожму его в буфере!\n\n"
             "📋 Как это работает:\n"
             "• Скачиваю видео в буфер\n"
-            "• Сжимаю до 5MB\n"
-            "• Отправляю сжатое видео\n"
+            "• Сжимаю до 2MB (максимальное сжатие)\n"
+            "• Отправляю через BufferedFile\n"
             "• Удаляю временные файлы\n\n"
             "Используй /start для полной обработки (видео → текст)."
         )
@@ -144,12 +144,12 @@ class TelegramBot:
             )
         elif query.data == "compress_video":
             await query.edit_message_text(
-                "🗜️ Сжатие видео через буфер\n\n"
+                "🗜️ Сжатие видео через BufferedFile\n\n"
                 "Отправь мне видео, и я сожму его в буфере!\n\n"
                 "📋 Как это работает:\n"
                 "• Скачиваю видео в буфер\n"
-                "• Сжимаю до 5MB (худшее качество)\n"
-                "• Отправляю сжатое видео\n"
+                "• Сжимаю до 2MB (максимальное сжатие)\n"
+                "• Отправляю через BufferedFile\n"
                 "• Удаляю временные файлы\n"
                 "• Максимальный размер: 50MB\n\n"
                 "Просто отправь видео файл!",
@@ -570,21 +570,24 @@ class TelegramBot:
                 await file.download_to_drive(temp_video_path)
             
             # Сжимаем видео
-            compressed_video_path = self.media_processor.compress_video_for_user(temp_video_path, target_size_mb=5)
+            compressed_video_path = self.media_processor.compress_video_for_user(temp_video_path, target_size_mb=2)
             
-            # Отправляем сжатое видео
+            # Отправляем сжатое видео через BufferedFile
             with open(compressed_video_path, 'rb') as compressed_file:
+                video_data = compressed_file.read()
+                buffered_video = BufferedInputFile(video_data, filename="compressed_video.mp4")
+                
                 await update.message.reply_video(
-                    video=compressed_file,
+                    video=buffered_video,
                     caption=f"""
-🎬 ВИДЕО сжато через буфер!
+🎬 ВИДЕО сжато через BufferedFile!
 
 📊 Статистика:
 • Длительность: {video.duration} сек
 • Исходный размер: {video.file_size / (1024*1024):.1f}MB
 • Сжатый размер: {os.path.getsize(compressed_video_path) / (1024*1024):.1f}MB
 
-💡 Видео сжато в буфере и отправлено!
+💡 Видео сжато в буфере и отправлено через BufferedFile!
                     """
                 )
             

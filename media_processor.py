@@ -97,7 +97,7 @@ class MediaProcessor:
             # В случае ошибки возвращаем исходный файл
             return video_path
     
-    def compress_video_for_user(self, video_path: str, target_size_mb: int = 5) -> str:
+    def compress_video_for_user(self, video_path: str, target_size_mb: int = 2) -> str:
         """
         Сжимает видео для отправки пользователю (минимальный размер, хороший звук)
         
@@ -120,18 +120,19 @@ class MediaProcessor:
             
             # Агрессивное сжатие для минимального размера
             # Видео: очень низкое качество, аудио: хорошее качество
-            compressed_video = video.resize(height=240)  # 240p
+            compressed_video = video.resize(height=180)  # 180p для максимального сжатия
             
-            # Сохраняем с оптимальными настройками
+            # Сохраняем с максимальным сжатием
             compressed_video.write_videofile(
                 compressed_path,
                 audio_codec='aac',
-                audio_bitrate='96k',  # Хорошее качество аудио
+                audio_bitrate='64k',  # Минимальное качество аудио
                 video_codec='libx264',
                 preset='ultrafast',  # Максимальная скорость
                 ffmpeg_params=[
-                    '-crf', '35',  # Очень низкое качество видео
-                    '-movflags', '+faststart'  # Быстрая загрузка
+                    '-crf', '40',  # Максимальное сжатие видео
+                    '-movflags', '+faststart',  # Быстрая загрузка
+                    '-vf', 'scale=320:180'  # Принудительное масштабирование
                 ],
                 verbose=False,
                 logger=None
