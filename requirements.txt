@@ -9,3 +9,5 @@ speechrecognition==3.10.0
 # pytesseract==0.3.10
 # Для Whisper (опционально)
 # whisper==1.1.10
+# Для Docker
+gunicorn==21.2.0

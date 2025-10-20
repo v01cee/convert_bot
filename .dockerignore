@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# Environment
+.env
+.env.local
+
+# Documentation
+README.md
+QUICK_START.md
+GITHUB_SETUP.md
+DEPLOYMENT.md
+LICENSE
+
+# Media files
+*.mp4
+*.mp3
+*.wav
+*.avi
+*.mov
+*.mkv
