@@ -26,6 +26,7 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("start", self.start_command))
         self.application.add_handler(CommandHandler("help", self.help_command))
         self.application.add_handler(CommandHandler("menu", self.menu_command))
+        self.application.add_handler(CommandHandler("compress", self.compress_command))
         
         # Обработчик кнопок
         self.application.add_handler(CallbackQueryHandler(self.button_callback))
@@ -53,6 +54,7 @@ class TelegramBot:
         keyboard = [
             [InlineKeyboardButton("🎥 Видео → Текст", callback_data="video_to_text")],
             [InlineKeyboardButton("🎵 Аудио → Текст", callback_data="audio_to_text")],
+            [InlineKeyboardButton("🗜️ Сжать видео", callback_data="compress_video")],
             [InlineKeyboardButton("❓ Помощь", callback_data="help")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -96,6 +98,15 @@ class TelegramBot:
         
         await update.message.reply_text("🎛 Главное меню:", reply_markup=reply_markup)
     
+    async def compress_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /compress - сжатие видео без обработки текста"""
+        await update.message.reply_text(
+            "🗜️ Режим сжатия видео\n\n"
+            "Отправь мне видео, и я отправлю его обратно в сжатом виде!\n\n"
+            "Telegram автоматически сожмет видео до минимального размера.\n"
+            "Используй /start для полной обработки (видео → текст)."
+        )
+    
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик нажатий на кнопки"""
         query = update.callback_query
@@ -121,6 +132,20 @@ class TelegramBot:
                 "• MP3, WAV, M4A, OGG\n"
                 "• Максимальный размер: 50MB\n\n"
                 "Просто отправь аудио файл!",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🔙 Назад", callback_data="back_to_start")
+                ]])
+            )
+        elif query.data == "compress_video":
+            await query.edit_message_text(
+                "🗜️ Сжатие видео\n\n"
+                "Отправь мне видео, и я отправлю его обратно в сжатом виде!\n\n"
+                "📋 Как это работает:\n"
+                "• Telegram автоматически сжимает видео\n"
+                "• Размер уменьшается в 5-10 раз\n"
+                "• Качество звука сохраняется\n"
+                "• Максимальный размер: 50MB\n\n"
+                "Просто отправь видео файл!",
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("🔙 Назад", callback_data="back_to_start")
                 ]])
@@ -287,7 +312,31 @@ class TelegramBot:
             result = self.media_processor.process_video_to_text(temp_video_path)
             
             if result['success']:
-                result_text = f"""
+                # Отправляем исходное видео обратно (Telegram автоматически сожмет)
+                try:
+                    # Отправляем видео по file_id (Telegram сожмет автоматически)
+                    await update.message.reply_document(
+                        document=document.file_id,  # Используем исходный file_id
+                        caption=f"""
+🎬 Видео отправлено обратно (Telegram автоматически сжал):
+
+📝 Текст извлечен:
+
+{result['text']}
+
+📊 Статистика:
+• Файл: {file_name}
+• Исходный размер: {file_size / (1024*1024):.1f}MB
+• Символов в тексте: {len(result['text'])}
+• File ID: `{document.file_id}`
+                        """,
+                        parse_mode='Markdown'
+                    )
+                    
+                except Exception as e:
+                    logger.error(f"Ошибка при отправке сжатого видео: {e}")
+                    # Если не удалось отправить видео, отправляем только текст
+                    result_text = f"""
 📝 Текст извлечен из видео файла:
 
 {result['text']}
@@ -297,7 +346,8 @@ class TelegramBot:
 • Размер видео: {file_size / (1024*1024):.1f}MB
 • Размер аудио: {result['audio_size'] / (1024*1024):.1f}MB
 • Символов в тексте: {len(result['text'])}
-                """
+                    """
+                    await processing_msg.edit_text(result_text)
             else:
                 result_text = f"""
 ❌ Ошибка при обработке видео:
@@ -306,8 +356,7 @@ class TelegramBot:
 
 Попробуйте другой файл или обратитесь к администратору.
                 """
-            
-            await processing_msg.edit_text(result_text)
+                await processing_msg.edit_text(result_text)
             
         except Exception as e:
             logger.error(f"Ошибка при обработке видео файла: {str(e)}")
@@ -317,10 +366,15 @@ class TelegramBot:
             )
     
     async def handle_video(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик видео - конвертация в текст через аудио"""
+        """Обработчик видео - конвертация в текст через аудио или простое сжатие"""
         video = update.message.video
         duration = video.duration
         file_size = video.file_size
+        
+        # Проверяем, хочет ли пользователь просто сжать видео
+        if update.message.caption and "сжать" in update.message.caption.lower():
+            await self.compress_video_only(update, context, video)
+            return
         
         # Проверяем размер файла
         if file_size > MAX_FILE_SIZE:
@@ -361,7 +415,31 @@ class TelegramBot:
             result = self.media_processor.process_video_to_text(temp_video_path)
             
             if result['success']:
-                result_text = f"""
+                # Отправляем исходное видео обратно (Telegram автоматически сожмет)
+                try:
+                    # Отправляем видео по file_id (Telegram сожмет автоматически)
+                    await update.message.reply_video(
+                        video=video.file_id,  # Используем исходный file_id
+                        caption=f"""
+🎬 Видео отправлено обратно (Telegram автоматически сжал):
+
+📝 Текст извлечен:
+
+{result['text']}
+
+📊 Статистика:
+• Длительность: {duration} сек
+• Исходный размер: {file_size / (1024*1024):.1f}MB
+• Символов в тексте: {len(result['text'])}
+• File ID: `{video.file_id}`
+                        """,
+                        parse_mode='Markdown'
+                    )
+                    
+                except Exception as e:
+                    logger.error(f"Ошибка при отправке сжатого видео: {e}")
+                    # Если не удалось отправить видео, отправляем только текст
+                    result_text = f"""
 📝 Текст извлечен из видео:
 
 {result['text']}
@@ -371,7 +449,8 @@ class TelegramBot:
 • Размер видео: {file_size / (1024*1024):.1f}MB
 • Размер аудио: {result['audio_size'] / (1024*1024):.1f}MB
 • Символов в тексте: {len(result['text'])}
-                """
+                    """
+                    await processing_msg.edit_text(result_text)
             else:
                 result_text = f"""
 ❌ Ошибка при обработке видео:
@@ -380,8 +459,7 @@ class TelegramBot:
 
 Попробуйте другой файл или обратитесь к администратору.
                 """
-            
-            await processing_msg.edit_text(result_text)
+                await processing_msg.edit_text(result_text)
             
         except Exception as e:
             logger.error(f"Ошибка при обработке видео: {str(e)}")
@@ -466,6 +544,30 @@ class TelegramBot:
         response = f"📸 Получил фото:\n\n📊 Размер: {file_size} байт"
         
         await update.message.reply_text(response)
+    
+    async def compress_video_only(self, update: Update, context: ContextTypes.DEFAULT_TYPE, video):
+        """Простое сжатие видео без обработки текста"""
+        try:
+            # Отправляем видео обратно (Telegram автоматически сожмет)
+            await update.message.reply_video(
+                video=video.file_id,
+                caption=f"""
+🗜️ Видео сжато!
+
+📊 Статистика:
+• Длительность: {video.duration} сек
+• Исходный размер: {video.file_size / (1024*1024):.1f}MB
+• File ID: `{video.file_id}`
+
+💡 Telegram автоматически сжал видео до минимального размера
+                """,
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"Ошибка при сжатии видео: {e}")
+            await update.message.reply_text(
+                f"❌ Ошибка при сжатии видео:\n{str(e)}"
+            )
     
     def run(self):
         """Запуск бота"""

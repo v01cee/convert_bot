@@ -4,12 +4,179 @@ import logging
 from moviepy.editor import VideoFileClip
 from pydub import AudioSegment
 import speech_recognition as sr
+from moviepy.video.fx import resize
 
 logger = logging.getLogger(__name__)
 
 class MediaProcessor:
     def __init__(self):
         self.recognizer = sr.Recognizer()
+    
+    def compress_video_for_processing(self, video_path: str, max_size_mb: int = 45) -> str:
+        """
+        Сжимает видео до размера меньше max_size_mb, сохраняя качество аудио
+        
+        Args:
+            video_path: Путь к исходному видео
+            max_size_mb: Максимальный размер в MB
+            
+        Returns:
+            str: Путь к сжатому видео
+        """
+        try:
+            logger.info(f"Сжимаю видео: {video_path}")
+            
+            # Создаем временный файл для сжатого видео
+            temp_dir = tempfile.gettempdir()
+            compressed_path = os.path.join(temp_dir, f"compressed_{os.getpid()}.mp4")
+            
+            # Загружаем видео
+            video = VideoFileClip(video_path)
+            
+            # Получаем текущий размер
+            current_size_mb = os.path.getsize(video_path) / (1024 * 1024)
+            logger.info(f"Исходный размер: {current_size_mb:.1f}MB")
+            
+            # Если файл уже меньше лимита, возвращаем исходный
+            if current_size_mb <= max_size_mb:
+                logger.info("Файл уже подходящего размера")
+                video.close()
+                return video_path
+            
+            # Настраиваем сжатие
+            # Видео: низкое качество, аудио: высокое качество
+            compressed_video = video.resize(height=360)  # 360p для видео
+            
+            # Сохраняем с высоким качеством аудио
+            compressed_video.write_videofile(
+                compressed_path,
+                audio_codec='aac',
+                audio_bitrate='128k',  # Высокое качество аудио
+                video_codec='libx264',
+                preset='fast',  # Быстрое сжатие
+                ffmpeg_params=['-crf', '28'],  # Низкое качество видео
+                verbose=False,
+                logger=None
+            )
+            
+            # Закрываем файлы
+            compressed_video.close()
+            video.close()
+            
+            # Проверяем размер сжатого файла
+            compressed_size_mb = os.path.getsize(compressed_path) / (1024 * 1024)
+            logger.info(f"Сжатый размер: {compressed_size_mb:.1f}MB")
+            
+            # Если все еще большой, сжимаем еще больше
+            if compressed_size_mb > max_size_mb:
+                logger.info("Дополнительное сжатие...")
+                video = VideoFileClip(compressed_path)
+                ultra_compressed = video.resize(height=240)  # 240p
+                
+                ultra_compressed.write_videofile(
+                    compressed_path,
+                    audio_codec='aac',
+                    audio_bitrate='128k',
+                    video_codec='libx264',
+                    preset='fast',
+                    ffmpeg_params=['-crf', '32'],  # Еще ниже качество видео
+                    verbose=False,
+                    logger=None
+                )
+                
+                ultra_compressed.close()
+                video.close()
+                
+                final_size_mb = os.path.getsize(compressed_path) / (1024 * 1024)
+                logger.info(f"Финальный размер: {final_size_mb:.1f}MB")
+            
+            return compressed_path
+            
+        except Exception as e:
+            logger.error(f"Ошибка при сжатии видео: {str(e)}")
+            # В случае ошибки возвращаем исходный файл
+            return video_path
+    
+    def compress_video_for_user(self, video_path: str, target_size_mb: int = 5) -> str:
+        """
+        Сжимает видео для отправки пользователю (минимальный размер, хороший звук)
+        
+        Args:
+            video_path: Путь к исходному видео
+            target_size_mb: Целевой размер в MB
+            
+        Returns:
+            str: Путь к сжатому видео
+        """
+        try:
+            logger.info(f"Сжимаю видео для пользователя: {video_path}")
+            
+            # Создаем временный файл для сжатого видео
+            temp_dir = tempfile.gettempdir()
+            compressed_path = os.path.join(temp_dir, f"user_compressed_{os.getpid()}.mp4")
+            
+            # Загружаем видео
+            video = VideoFileClip(video_path)
+            
+            # Агрессивное сжатие для минимального размера
+            # Видео: очень низкое качество, аудио: хорошее качество
+            compressed_video = video.resize(height=240)  # 240p
+            
+            # Сохраняем с оптимальными настройками
+            compressed_video.write_videofile(
+                compressed_path,
+                audio_codec='aac',
+                audio_bitrate='96k',  # Хорошее качество аудио
+                video_codec='libx264',
+                preset='ultrafast',  # Максимальная скорость
+                ffmpeg_params=[
+                    '-crf', '35',  # Очень низкое качество видео
+                    '-movflags', '+faststart'  # Быстрая загрузка
+                ],
+                verbose=False,
+                logger=None
+            )
+            
+            # Закрываем файлы
+            compressed_video.close()
+            video.close()
+            
+            # Проверяем размер
+            final_size_mb = os.path.getsize(compressed_path) / (1024 * 1024)
+            logger.info(f"Сжатое видео: {final_size_mb:.1f}MB")
+            
+            # Если все еще большой, сжимаем еще больше
+            if final_size_mb > target_size_mb:
+                logger.info("Дополнительное сжатие до минимума...")
+                video = VideoFileClip(compressed_path)
+                ultra_compressed = video.resize(height=180)  # 180p
+                
+                ultra_compressed.write_videofile(
+                    compressed_path,
+                    audio_codec='aac',
+                    audio_bitrate='64k',  # Минимальное качество аудио
+                    video_codec='libx264',
+                    preset='ultrafast',
+                    ffmpeg_params=[
+                        '-crf', '40',  # Минимальное качество видео
+                        '-movflags', '+faststart'
+                    ],
+                    verbose=False,
+                    logger=None
+                )
+                
+                ultra_compressed.close()
+                video.close()
+                
+                final_size_mb = os.path.getsize(compressed_path) / (1024 * 1024)
+                logger.info(f"Ультра-сжатое видео: {final_size_mb:.1f}MB")
+            
+            return compressed_path
+            
+        except Exception as e:
+            logger.error(f"Ошибка при сжатии видео для пользователя: {str(e)}")
+            # В случае ошибки возвращаем исходный файл
+            return video_path
     
     def extract_audio_from_video(self, video_path: str, output_audio_path: str = None) -> str:
         """
@@ -97,7 +264,7 @@ class MediaProcessor:
     
     def process_video_to_text(self, video_path: str, language: str = 'ru') -> dict:
         """
-        Полный процесс: видео -> аудио -> текст
+        Полный процесс: видео -> сжатие -> аудио -> текст
         
         Args:
             video_path: Путь к видео файлу
@@ -107,22 +274,36 @@ class MediaProcessor:
             dict: Результат обработки с текстом и метаданными
         """
         temp_audio_path = None
+        compressed_video_path = None
         try:
+            # Шаг 0: Сжимаем видео если нужно
+            original_size = os.path.getsize(video_path)
+            original_size_mb = original_size / (1024 * 1024)
+            
+            if original_size_mb > 45:  # Если больше 45MB, сжимаем
+                logger.info(f"Сжимаю большое видео: {original_size_mb:.1f}MB")
+                compressed_video_path = self.compress_video_for_processing(video_path)
+                processing_video_path = compressed_video_path
+            else:
+                processing_video_path = video_path
+            
             # Шаг 1: Извлекаем аудио из видео
-            temp_audio_path = self.extract_audio_from_video(video_path)
+            temp_audio_path = self.extract_audio_from_video(processing_video_path)
             
             # Шаг 2: Конвертируем аудио в текст
             text = self.convert_audio_to_text(temp_audio_path, language)
             
             # Получаем информацию о файлах
-            video_size = os.path.getsize(video_path)
+            final_video_size = os.path.getsize(processing_video_path)
             audio_size = os.path.getsize(temp_audio_path) if temp_audio_path else 0
             
             return {
                 'success': True,
                 'text': text,
-                'video_size': video_size,
+                'original_size': original_size,
+                'video_size': final_video_size,
                 'audio_size': audio_size,
+                'compressed': compressed_video_path is not None,
                 'temp_audio_path': temp_audio_path
             }
             
@@ -142,6 +323,14 @@ class MediaProcessor:
                     logger.info(f"✅ Временный аудио файл удален: {temp_audio_path}")
                 except Exception as e:
                     logger.warning(f"⚠️ Не удалось удалить временный файл: {e}")
+            
+            # Удаляем сжатое видео (если было создано)
+            if compressed_video_path and os.path.exists(compressed_video_path):
+                try:
+                    os.remove(compressed_video_path)
+                    logger.info(f"✅ Сжатое видео удалено: {compressed_video_path}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Не удалось удалить сжатое видео: {e}")
             
             # Удаляем исходный видео файл
             if os.path.exists(video_path):
