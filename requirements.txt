@@ -1,0 +1,11 @@
+python-telegram-bot==20.7
+python-dotenv==1.0.0
+# Для обработки видео и аудио
+moviepy==1.0.3
+pydub==0.25.1
+speechrecognition==3.10.0
+# Для OCR (опционально)
+# opencv-python==4.8.1.78
+# pytesseract==0.3.10
+# Для Whisper (опционально)
+# whisper==1.1.10
