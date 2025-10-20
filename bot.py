@@ -54,7 +54,7 @@ class TelegramBot:
         keyboard = [
             [InlineKeyboardButton("🎥 Видео → Текст", callback_data="video_to_text")],
             [InlineKeyboardButton("🎵 Аудио → Текст", callback_data="audio_to_text")],
-            [InlineKeyboardButton("🎬 Отправить ВИДЕО", callback_data="compress_video")],
+            [InlineKeyboardButton("🗜️ Сжать через буфер", callback_data="compress_video")],
             [InlineKeyboardButton("❓ Помощь", callback_data="help")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -101,11 +101,15 @@ class TelegramBot:
         await update.message.reply_text("🎛 Главное меню:", reply_markup=reply_markup)
     
     async def compress_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик команды /compress - отправка ВИДЕО обратно"""
+        """Обработчик команды /compress - сжатие видео через буфер"""
         await update.message.reply_text(
-            "🎬 Режим отправки ВИДЕО\n\n"
-            "Отправь мне видео, и я отправлю его обратно как ВИДЕО!\n\n"
-            "Это ВИДЕО, а не файл - можно смотреть прямо в Telegram.\n"
+            "🗜️ Режим сжатия видео через буфер\n\n"
+            "Отправь мне видео, и я сожму его в буфере!\n\n"
+            "📋 Как это работает:\n"
+            "• Скачиваю видео в буфер\n"
+            "• Сжимаю до 5MB\n"
+            "• Отправляю сжатое видео\n"
+            "• Удаляю временные файлы\n\n"
             "Используй /start для полной обработки (видео → текст)."
         )
     
@@ -140,12 +144,13 @@ class TelegramBot:
             )
         elif query.data == "compress_video":
             await query.edit_message_text(
-                "🎬 Отправка ВИДЕО\n\n"
-                "Отправь мне видео, и я отправлю его обратно как ВИДЕО!\n\n"
+                "🗜️ Сжатие видео через буфер\n\n"
+                "Отправь мне видео, и я сожму его в буфере!\n\n"
                 "📋 Как это работает:\n"
-                "• Это ВИДЕО, а не файл\n"
-                "• Можно смотреть прямо в Telegram\n"
-                "• Отправляется в худшем качестве\n"
+                "• Скачиваю видео в буфер\n"
+                "• Сжимаю до 5MB (худшее качество)\n"
+                "• Отправляю сжатое видео\n"
+                "• Удаляю временные файлы\n"
                 "• Максимальный размер: 50MB\n\n"
                 "Просто отправь видео файл!",
                 reply_markup=InlineKeyboardMarkup([[
@@ -389,8 +394,8 @@ class TelegramBot:
                 f"Отправляю сжатое видео..."
             )
             
-            # Отправляем ВИДЕО в худшем качестве
-            await self.send_video_quality(update, context, video, "worst")
+            # Сжимаем видео через буфер
+            await self.compress_video_only(update, context, video)
             return
         
         # Показываем, что начали обработку
@@ -427,7 +432,7 @@ class TelegramBot:
                 try:
                     # Отправляем видео по file_id (Telegram сожмет автоматически)
                     await update.message.reply_video(
-                        video=video.file_id[0],  # Худшее качество
+                        video=video.file_id,  # Просто file_id
                         caption=f"""
 🎬 Видео отправлено обратно (Telegram автоматически сжал):
 
@@ -554,27 +559,43 @@ class TelegramBot:
         await update.message.reply_text(response)
     
     async def compress_video_only(self, update: Update, context: ContextTypes.DEFAULT_TYPE, video):
-        """Отправляет ВИДЕО обратно (не файл!)"""
+        """Сжимает видео через буфер и отправляет"""
         try:
-            # Отправляем ВИДЕО обратно (худшее качество)
-            await update.message.reply_video(
-                video=video.file_id[0],  # Худшее качество
-                caption=f"""
-🎬 ВИДЕО отправлено!
+            # Скачиваем видео в буфер
+            file = await context.bot.get_file(video.file_id)
+            
+            # Создаем временный файл
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video:
+                temp_video_path = temp_video.name
+                await file.download_to_drive(temp_video_path)
+            
+            # Сжимаем видео
+            compressed_video_path = self.media_processor.compress_video_for_user(temp_video_path, target_size_mb=5)
+            
+            # Отправляем сжатое видео
+            with open(compressed_video_path, 'rb') as compressed_file:
+                await update.message.reply_video(
+                    video=compressed_file,
+                    caption=f"""
+🎬 ВИДЕО сжато через буфер!
 
 📊 Статистика:
 • Длительность: {video.duration} сек
 • Исходный размер: {video.file_size / (1024*1024):.1f}MB
-• File ID: `{video.file_id}`
+• Сжатый размер: {os.path.getsize(compressed_video_path) / (1024*1024):.1f}MB
 
-💡 Это ВИДЕО, а не файл!
-                """,
-                parse_mode='Markdown'
-            )
+💡 Видео сжато в буфере и отправлено!
+                    """
+                )
+            
+            # Удаляем временные файлы
+            os.unlink(temp_video_path)
+            os.unlink(compressed_video_path)
+            
         except Exception as e:
-            logger.error(f"Ошибка при отправке видео: {e}")
+            logger.error(f"Ошибка при сжатии видео: {e}")
             await update.message.reply_text(
-                f"❌ Ошибка при отправке видео:\n{str(e)}"
+                f"❌ Ошибка при сжатии видео:\n{str(e)}"
             )
     
     async def send_video_quality(self, update: Update, context: ContextTypes.DEFAULT_TYPE, video, quality="worst"):
@@ -583,19 +604,19 @@ class TelegramBot:
             if quality == "best":
                 # Лучшее качество
                 await update.message.reply_video(
-                    video=video.file_id[-1],  # Лучшее качество
+                    video=video.file_id,  # Лучшее качество
                     caption="🎬 ВИДЕО (лучшее качество)"
                 )
             elif quality == "worst":
                 # Худшее качество
                 await update.message.reply_video(
-                    video=video.file_id[0],  # Худшее качество
+                    video=video.file_id,  # Худшее качество
                     caption="🎬 ВИДЕО (худшее качество)"
                 )
             else:
                 # Обычное качество
                 await update.message.reply_video(
-                    video=video.file_id[0],  # Худшее качество по умолчанию
+                    video=video.file_id,  # Обычное качество
                     caption="🎬 ВИДЕО (обычное качество)"
                 )
         except Exception as e:
