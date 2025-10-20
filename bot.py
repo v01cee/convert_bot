@@ -214,12 +214,6 @@ class TelegramBot:
             # Обрабатываем аудио: конвертируем в текст
             result = self.media_processor.process_audio_to_text(temp_audio_path)
             
-            # Удаляем временный файл
-            try:
-                os.unlink(temp_audio_path)
-            except:
-                pass
-            
             if result['success']:
                 result_text = f"""
 📝 Текст извлечен из аудио файла:
@@ -291,12 +285,6 @@ class TelegramBot:
             
             # Обрабатываем видео: извлекаем аудио и конвертируем в текст
             result = self.media_processor.process_video_to_text(temp_video_path)
-            
-            # Удаляем временный файл
-            try:
-                os.unlink(temp_video_path)
-            except:
-                pass
             
             if result['success']:
                 result_text = f"""
@@ -372,12 +360,6 @@ class TelegramBot:
             # Обрабатываем видео: извлекаем аудио и конвертируем в текст
             result = self.media_processor.process_video_to_text(temp_video_path)
             
-            # Удаляем временный файл
-            try:
-                os.unlink(temp_video_path)
-            except:
-                pass
-            
             if result['success']:
                 result_text = f"""
 📝 Текст извлечен из видео:
@@ -444,12 +426,6 @@ class TelegramBot:
             
             # Обрабатываем аудио: конвертируем в текст
             result = self.media_processor.process_audio_to_text(temp_audio_path)
-            
-            # Удаляем временный файл
-            try:
-                os.unlink(temp_audio_path)
-            except:
-                pass
             
             if result['success']:
                 result_text = f"""

@@ -139,9 +139,17 @@ class MediaProcessor:
             if temp_audio_path and os.path.exists(temp_audio_path):
                 try:
                     os.remove(temp_audio_path)
-                    logger.info(f"Временный аудио файл удален: {temp_audio_path}")
+                    logger.info(f"✅ Временный аудио файл удален: {temp_audio_path}")
                 except Exception as e:
-                    logger.warning(f"Не удалось удалить временный файл: {e}")
+                    logger.warning(f"⚠️ Не удалось удалить временный файл: {e}")
+            
+            # Удаляем исходный видео файл
+            if os.path.exists(video_path):
+                try:
+                    os.remove(video_path)
+                    logger.info(f"✅ Исходный видео файл удален: {video_path}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Не удалось удалить исходный файл: {e}")
     
     def process_audio_to_text(self, audio_path: str, language: str = 'ru') -> dict:
         """
@@ -174,3 +182,12 @@ class MediaProcessor:
                 'error': str(e),
                 'text': f"❌ Ошибка при обработке аудио: {str(e)}"
             }
+        
+        finally:
+            # Удаляем исходный аудио файл
+            if os.path.exists(audio_path):
+                try:
+                    os.remove(audio_path)
+                    logger.info(f"✅ Исходный аудио файл удален: {audio_path}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Не удалось удалить исходный файл: {e}")
